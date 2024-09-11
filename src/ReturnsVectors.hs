@@ -1,4 +1,4 @@
-module Returns where
+module ReturnsVectors where
 
 import qualified Data.Vector as V
 
