@@ -1,2 +1,2 @@
-# introduction-portfolio-construction
-Based on the course: https://www.coursera.org/learn/introduction-portfolio-construction-python/, but witten in Haskell
+# Introduction to Portfolio Construction in Haskell
+Based on the course: [Introduction to Portfolio Construction](https://www.coursera.org/learn/introduction-portfolio-construction-python/), but written in Haskell
