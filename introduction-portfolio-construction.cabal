@@ -22,7 +22,8 @@ extra-source-files:
     README.md
 
 library
-    exposed-modules:  Returns
+    exposed-modules:  ReturnsVectors,
+                      ReturnsFrames
 
     -- Modules included in this library but not exported.
     -- other-modules:
@@ -35,7 +36,9 @@ library
                       foldl==1.4.*,
                       microlens == 0.4.13.*,
                       statistics == 0.16.*,
-                      vector == 0.13.*
+                      vector == 0.13.*,
+                      vinyl==0.14.*,
+                      time==1.12.*
     hs-source-dirs:   src
     default-language: Haskell2010
 
