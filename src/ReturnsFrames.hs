@@ -20,15 +20,18 @@ import qualified Data.Ord as V
 import Data.Time (Day)
 import qualified Data.Vector as V
 import Data.Vinyl
-import Data.Vinyl.Functor (Const (..), Identity (..))
+import Data.Vinyl.Functor
+import Data.Vinyl.TypeLevel
 import Frames
 import Frames.CSV (readTableOpt)
-import Frames.Rec (rgetField, rputField)
+import Frames.InCore (RecVec)
+import Frames.Rec
 import Lens.Micro
 import Lens.Micro.Extras
 import Pipes (Producer, (>->))
 import Pipes hiding (Proxy)
 import qualified Pipes.Prelude as P
+import qualified ReturnsVectors as Returns
 import Statistics.Sample as S
 
 -- define a Show instance for frames
@@ -53,11 +56,13 @@ type PreviousPeak = "previous_peak" :-> Double
 
 type Drawdown = "drawdown" :-> Double
 
+type PercentChange = "percent_change" :-> Double
+
 type StockSeries =
   Record
-    '[Date, Price]
+    '[Timestamp, Lo30]
 
-type StockSeriesExtended = Record '[Date, Price, WealthIndex, PreviousPeak, Drawdown]
+type StockSeriesExtended = Record '[Timestamp, Lo30, WealthIndex]
 
 returnsStream :: (MonadSafe m) => Producer Returns m ()
 returnsStream = readTableOpt returnsParser "data/Portfolios_Formed_on_ME_monthly_EW.csv"
@@ -65,23 +70,25 @@ returnsStream = readTableOpt returnsParser "data/Portfolios_Formed_on_ME_monthly
 loadReturns :: IO (Frame Returns)
 loadReturns = inCoreAoS returnsStream
 
-drawdown :: StockSeries -> StockSeriesExtended
-drawdown r =
-  let price = rgetField @Price r
-      wealthIndex = price -- Replace with actual computation if needed
-      priorPeak = price -- Replace with actual computation if needed
-      drawdownPercent = (price - priorPeak) / priorPeak
-      -- Using rputField to add fields to the record
-      extendedRecord =
-        r
-          <+> wealthIndex
-          &: priorPeak
-          &: drawdownPercent
-          &: RNil
-   in extendedRecord
+computePercentChange :: Double -> Double
+computePercentChange x = x * 1.10
+
+addPercentChange :: Frame StockSeries -> Frame StockSeriesExtended
+addPercentChange frame =
+  let percentChanges = fmap (computePercentChange . rgetField @Lo30) frame
+      percentChangeFrame = toFrame $ fmap (&: RNil) percentChanges
+   in zipFrames frame percentChangeFrame
+
+drawdown :: Frame StockSeries -> Frame StockSeriesExtended
+drawdown r = zipFrames r wealthIndexFrame
+  where
+    lo30 = map (rgetField @Lo30) (F.toList r)
+    wealthIndexFunc = scanl (\c p -> c * (1 + p)) 1 lo30
+    wealthIndexFrame = toFrame $ fmap (&: RNil) wealthIndexFunc
 
 main :: IO ()
 main = do
   ms <- loadReturns
-  filtered <- rcast @'[Timestamp, Lo30] ms
-  filtered
+  let casted_ms = fmap (rcast :: Returns -> StockSeries) ms
+  let filtered_ms = drawdown casted_ms
+  printFrame ", " filtered_ms
