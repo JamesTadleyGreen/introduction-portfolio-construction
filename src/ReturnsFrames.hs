@@ -52,6 +52,8 @@ type Price = "price" :-> Double
 
 type WealthIndex = "wealth_index" :-> Double
 
+type Peaks = "peaks" :-> Double
+
 type PreviousPeak = "previous_peak" :-> Double
 
 type Drawdown = "drawdown" :-> Double
@@ -60,9 +62,9 @@ type PercentChange = "percent_change" :-> Double
 
 type StockSeries =
   Record
-    '[Timestamp, Lo30]
+    '[Timestamp, Hi10]
 
-type StockSeriesExtended = Record '[Timestamp, Lo30, WealthIndex]
+type StockSeriesExtended = Record '[Timestamp, Hi10, WealthIndex, Peaks, Drawdown]
 
 returnsStream :: (MonadSafe m) => Producer Returns m ()
 returnsStream = readTableOpt returnsParser "data/Portfolios_Formed_on_ME_monthly_EW.csv"
@@ -70,21 +72,23 @@ returnsStream = readTableOpt returnsParser "data/Portfolios_Formed_on_ME_monthly
 loadReturns :: IO (Frame Returns)
 loadReturns = inCoreAoS returnsStream
 
-computePercentChange :: Double -> Double
-computePercentChange x = x * 1.10
+-- computePercentChange :: Double -> Double
+-- computePercentChange x = x * 1.10
 
-addPercentChange :: Frame StockSeries -> Frame StockSeriesExtended
-addPercentChange frame =
-  let percentChanges = fmap (computePercentChange . rgetField @Lo30) frame
-      percentChangeFrame = toFrame $ fmap (&: RNil) percentChanges
-   in zipFrames frame percentChangeFrame
+-- addPercentChange :: Frame StockSeries -> Frame StockSeriesExtended
+-- addPercentChange frame =
+--   let percentChanges = fmap (computePercentChange . rgetField @Hi10) frame
+--       percentChangeFrame = toFrame $ fmap (&: RNil) percentChanges
+--    in zipFrames frame percentChangeFrame
 
 drawdown :: Frame StockSeries -> Frame StockSeriesExtended
 drawdown r = zipFrames r wealthIndexFrame
   where
-    lo30 = map (rgetField @Lo30) (F.toList r)
-    wealthIndexFunc = scanl (\c p -> c * (1 + p)) 1 lo30
-    wealthIndexFrame = toFrame $ fmap (&: RNil) wealthIndexFunc
+    lo30 = map (rgetField @Hi10) (F.toList r)
+    wealth = tail $ scanl (\c p -> c * (1 + p / 100)) 1000 lo30
+    peaks = tail $ scanl max 0 wealth
+    drawdown = zipWith (\w p -> (w - p) / p) wealth peaks
+    wealthIndexFrame = toFrame $ fmap (\(w, p, d) -> w &: p &: d &: RNil) (zip3 wealth peaks drawdown)
 
 main :: IO ()
 main = do
